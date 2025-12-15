@@ -68,8 +68,7 @@ func main() {
 
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
-	r.Use(middleware.Recoverer)
-
+	r.Use(httpmw.Recover())
 	r.Use(httpmw.RequestLogger(log))
 	r.Use(httpmw.ResponseRequestID("X-Request-ID"))
 

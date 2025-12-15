@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"subs-service/internal/subscription"
 	"syscall"
 	"time"
 
@@ -40,6 +41,13 @@ func main() {
 	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
+	})
+
+	var stubSvc subscription.Service = subscription.NewStubService()
+	subHTTP := subscription.NewTransportHTTP(stubSvc)
+
+	r.Route("/api/v1/subscriptions", func(sr chi.Router) {
+		sr.Mount("/", subHTTP.Routes())
 	})
 
 	srv := httpserver.New(r, httpserver.Config{

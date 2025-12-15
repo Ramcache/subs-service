@@ -8,6 +8,9 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"go.uber.org/zap"
+
+	plog "subs-service/internal/platform/logger"
 )
 
 type TransportHTTP struct {
@@ -43,18 +46,45 @@ func (t *TransportHTTP) Routes() http.Handler {
 // @Failure      500 {object} apiError
 // @Router       /api/v1/subscriptions [post]
 func (t *TransportHTTP) handleCreate(w http.ResponseWriter, r *http.Request) {
+	log := plog.FromContext(r.Context()).With(
+		zap.String("op", "http.subscription.create"),
+	)
+
+	log.Debug("request received")
+
 	var req CreateRequest
 	if err := decodeJSON(r, &req); err != nil {
+		log.Warn("decode json failed", zap.Error(err))
 		writeError(w, http.StatusBadRequest, "invalid_json", err.Error())
 		return
 	}
 
+	log = log.With(
+		zap.String("user_id", strings.TrimSpace(req.UserID)),
+		zap.String("service_name", strings.TrimSpace(req.ServiceName)),
+		zap.Int64("price", req.Price),
+		zap.String("start_date", strings.TrimSpace(req.StartDate)),
+		zap.Bool("has_end_date", req.EndDate != nil),
+	)
+	if req.EndDate != nil {
+		log = log.With(zap.String("end_date", strings.TrimSpace(*req.EndDate)))
+	}
+
+	log.Debug("calling service create")
 	resp, err := t.svc.Create(r.Context(), req)
 	if err != nil {
+		if isClientError(err) {
+			log.Warn("service create failed", zap.Error(err))
+		} else {
+			log.Error("service create failed", zap.Error(err))
+		}
 		writeSvcError(w, err)
 		return
 	}
 
+	log.Info("request succeeded",
+		zap.String("subscription_id", resp.ID),
+	)
 	writeJSON(w, http.StatusCreated, resp)
 }
 
@@ -70,17 +100,36 @@ func (t *TransportHTTP) handleCreate(w http.ResponseWriter, r *http.Request) {
 // @Failure      500 {object} apiError
 // @Router       /api/v1/subscriptions/{id} [get]
 func (t *TransportHTTP) handleGet(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	if strings.TrimSpace(id) == "" {
+	id := strings.TrimSpace(chi.URLParam(r, "id"))
+
+	log := plog.FromContext(r.Context()).With(
+		zap.String("op", "http.subscription.get"),
+		zap.String("subscription_id", id),
+	)
+
+	log.Debug("request received")
+
+	if id == "" {
+		log.Warn("validation failed", zap.String("reason", "id is required"))
 		writeError(w, http.StatusBadRequest, "validation_error", "id is required")
 		return
 	}
 
+	log.Debug("calling service get")
 	resp, err := t.svc.Get(r.Context(), id)
 	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			log.Info("subscription not found")
+		} else if isClientError(err) {
+			log.Warn("service get failed", zap.Error(err))
+		} else {
+			log.Error("service get failed", zap.Error(err))
+		}
 		writeSvcError(w, err)
 		return
 	}
+
+	log.Debug("request succeeded")
 	writeJSON(w, http.StatusOK, resp)
 }
 
@@ -98,27 +147,56 @@ func (t *TransportHTTP) handleGet(w http.ResponseWriter, r *http.Request) {
 // @Failure      500 {object} apiError
 // @Router       /api/v1/subscriptions/{id} [patch]
 func (t *TransportHTTP) handlePatch(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	if strings.TrimSpace(id) == "" {
+	id := strings.TrimSpace(chi.URLParam(r, "id"))
+
+	log := plog.FromContext(r.Context()).With(
+		zap.String("op", "http.subscription.update"),
+		zap.String("subscription_id", id),
+	)
+
+	log.Debug("request received")
+
+	if id == "" {
+		log.Warn("validation failed", zap.String("reason", "id is required"))
 		writeError(w, http.StatusBadRequest, "validation_error", "id is required")
 		return
 	}
 
 	var req UpdateRequest
 	if err := decodeJSON(r, &req); err != nil {
+		log.Warn("decode json failed", zap.Error(err))
 		writeError(w, http.StatusBadRequest, "invalid_json", err.Error())
 		return
 	}
 	if err := validateUpdate(req); err != nil {
+		log.Warn("validation failed", zap.Error(err))
 		writeError(w, http.StatusBadRequest, "validation_error", err.Error())
 		return
 	}
 
+	log = log.With(
+		zap.Bool("patch_service_name", req.ServiceName != nil),
+		zap.Bool("patch_price", req.Price != nil),
+		zap.Bool("patch_user_id", req.UserID != nil),
+		zap.Bool("patch_start_date", req.StartDate != nil),
+		zap.Bool("patch_end_date", req.EndDate != nil),
+	)
+
+	log.Debug("calling service update")
 	resp, err := t.svc.Update(r.Context(), id, req)
 	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			log.Info("subscription not found")
+		} else if isClientError(err) {
+			log.Warn("service update failed", zap.Error(err))
+		} else {
+			log.Error("service update failed", zap.Error(err))
+		}
 		writeSvcError(w, err)
 		return
 	}
+
+	log.Info("request succeeded", zap.String("subscription_id", resp.ID))
 	writeJSON(w, http.StatusOK, resp)
 }
 
@@ -133,16 +211,35 @@ func (t *TransportHTTP) handlePatch(w http.ResponseWriter, r *http.Request) {
 // @Failure      500 {object} apiError
 // @Router       /api/v1/subscriptions/{id} [delete]
 func (t *TransportHTTP) handleDelete(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	if strings.TrimSpace(id) == "" {
+	id := strings.TrimSpace(chi.URLParam(r, "id"))
+
+	log := plog.FromContext(r.Context()).With(
+		zap.String("op", "http.subscription.delete"),
+		zap.String("subscription_id", id),
+	)
+
+	log.Debug("request received")
+
+	if id == "" {
+		log.Warn("validation failed", zap.String("reason", "id is required"))
 		writeError(w, http.StatusBadRequest, "validation_error", "id is required")
 		return
 	}
 
+	log.Debug("calling service delete")
 	if err := t.svc.Delete(r.Context(), id); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			log.Info("subscription not found")
+		} else if isClientError(err) {
+			log.Warn("service delete failed", zap.Error(err))
+		} else {
+			log.Error("service delete failed", zap.Error(err))
+		}
 		writeSvcError(w, err)
 		return
 	}
+
+	log.Info("request succeeded")
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -162,32 +259,62 @@ func (t *TransportHTTP) handleDelete(w http.ResponseWriter, r *http.Request) {
 func (t *TransportHTTP) handleList(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 
-	var userID *string
-	if v := strings.TrimSpace(q.Get("user_id")); v != "" {
-		userID = &v
-	}
-
-	var serviceName *string
-	if v := strings.TrimSpace(q.Get("service_name")); v != "" {
-		serviceName = &v
-	}
+	userID := strings.TrimSpace(q.Get("user_id"))
+	serviceName := strings.TrimSpace(q.Get("service_name"))
 
 	limit := parseIntDefault(q.Get("limit"), 20)
 	offset := parseIntDefault(q.Get("offset"), 0)
+
+	log := plog.FromContext(r.Context()).With(
+		zap.String("op", "http.subscription.list"),
+		zap.Int("limit", limit),
+		zap.Int("offset", offset),
+	)
+	if userID != "" {
+		log = log.With(zap.String("user_id", userID))
+	}
+	if serviceName != "" {
+		log = log.With(zap.String("service_name", serviceName))
+	}
+
+	log.Debug("request received")
+
 	if limit <= 0 || limit > 200 {
+		log.Warn("validation failed", zap.String("reason", "limit out of range"))
 		writeError(w, http.StatusBadRequest, "validation_error", "limit must be between 1 and 200")
 		return
 	}
 	if offset < 0 {
+		log.Warn("validation failed", zap.String("reason", "offset must be >= 0"))
 		writeError(w, http.StatusBadRequest, "validation_error", "offset must be >= 0")
 		return
 	}
 
-	resp, err := t.svc.List(r.Context(), userID, serviceName, limit, offset)
+	var uidPtr *string
+	if userID != "" {
+		uidPtr = &userID
+	}
+	var snPtr *string
+	if serviceName != "" {
+		snPtr = &serviceName
+	}
+
+	log.Debug("calling service list")
+	resp, err := t.svc.List(r.Context(), uidPtr, snPtr, limit, offset)
 	if err != nil {
+		if isClientError(err) {
+			log.Warn("service list failed", zap.Error(err))
+		} else {
+			log.Error("service list failed", zap.Error(err))
+		}
 		writeSvcError(w, err)
 		return
 	}
+
+	log.Info("request succeeded",
+		zap.Int("items", len(resp.Items)),
+		zap.Int64("total", resp.Total),
+	)
 	writeJSON(w, http.StatusOK, resp)
 }
 
@@ -209,61 +336,64 @@ func (t *TransportHTTP) handleTotal(w http.ResponseWriter, r *http.Request) {
 
 	from := strings.TrimSpace(q.Get("from"))
 	to := strings.TrimSpace(q.Get("to"))
+
+	userID := strings.TrimSpace(q.Get("user_id"))
+	serviceName := strings.TrimSpace(q.Get("service_name"))
+
+	log := plog.FromContext(r.Context()).With(
+		zap.String("op", "http.subscription.total"),
+		zap.String("from", from),
+		zap.String("to", to),
+	)
+	if userID != "" {
+		log = log.With(zap.String("user_id", userID))
+	}
+	if serviceName != "" {
+		log = log.With(zap.String("service_name", serviceName))
+	}
+
+	log.Debug("request received")
+
 	if from == "" || to == "" {
+		log.Warn("validation failed", zap.String("reason", "from and to are required"))
 		writeError(w, http.StatusBadRequest, "validation_error", "from and to are required (MM-YYYY)")
 		return
 	}
+
 	if _, err := ParseMonthMMYYYY(from); err != nil {
+		log.Warn("validation failed", zap.String("reason", "invalid from format"), zap.Error(err))
 		writeError(w, http.StatusBadRequest, "validation_error", "invalid from: "+err.Error())
 		return
 	}
 	if _, err := ParseMonthMMYYYY(to); err != nil {
+		log.Warn("validation failed", zap.String("reason", "invalid to format"), zap.Error(err))
 		writeError(w, http.StatusBadRequest, "validation_error", "invalid to: "+err.Error())
 		return
 	}
 
-	var userID *string
-	if v := strings.TrimSpace(q.Get("user_id")); v != "" {
-		userID = &v
+	var uidPtr *string
+	if userID != "" {
+		uidPtr = &userID
+	}
+	var snPtr *string
+	if serviceName != "" {
+		snPtr = &serviceName
 	}
 
-	var serviceName *string
-	if v := strings.TrimSpace(q.Get("service_name")); v != "" {
-		serviceName = &v
-	}
-
-	resp, err := t.svc.Total(r.Context(), from, to, userID, serviceName)
+	log.Debug("calling service total")
+	resp, err := t.svc.Total(r.Context(), from, to, uidPtr, snPtr)
 	if err != nil {
+		if isClientError(err) {
+			log.Warn("service total failed", zap.Error(err))
+		} else {
+			log.Error("service total failed", zap.Error(err))
+		}
 		writeSvcError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, resp)
-}
 
-func validateCreate(req CreateRequest) error {
-	if strings.TrimSpace(req.ServiceName) == "" {
-		return errors.New("service_name is required")
-	}
-	if req.Price < 0 {
-		return errors.New("price must be >= 0")
-	}
-	if strings.TrimSpace(req.UserID) == "" {
-		return errors.New("user_id is required")
-	}
-	if _, err := ParseMonthMMYYYY(req.StartDate); err != nil {
-		return errors.New("start_date: " + err.Error())
-	}
-	if req.EndDate != nil {
-		em, err := ParseMonthMMYYYY(*req.EndDate)
-		if err != nil {
-			return errors.New("end_date: " + err.Error())
-		}
-		sm, _ := ParseMonthMMYYYY(req.StartDate)
-		if em.Compare(sm) < 0 {
-			return errors.New("end_date must be >= start_date")
-		}
-	}
-	return nil
+	log.Info("request succeeded", zap.Int64("total", resp.Total))
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func validateUpdate(req UpdateRequest) error {
@@ -337,4 +467,9 @@ func parseIntDefault(s string, def int) int {
 		return def
 	}
 	return v
+}
+
+func isClientError(err error) bool {
+	var ve ValidationError
+	return errors.As(err, &ve) || errors.Is(err, ErrInvalidInput) || errors.Is(err, ErrNotFound)
 }

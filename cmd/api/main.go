@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"subs-service/internal/platform/db"
 	"subs-service/internal/subscription"
 	"syscall"
 	"time"
@@ -31,6 +32,20 @@ func main() {
 		panic(err)
 	}
 	defer func() { _ = log.Sync() }()
+	ctx := context.Background()
+
+	pool, err := db.NewPool(ctx, db.Config{
+		DatabaseURL: cfg.DatabaseURL,
+		MaxConns:    10,
+	})
+	if err != nil {
+		log.Fatal("db connect failed", zap.Error(err))
+	}
+	defer pool.Close()
+
+	repo := subscription.NewRepositoryPG(pool)
+	svc := subscription.NewService(repo)
+	subHTTP := subscription.NewTransportHTTP(svc)
 
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
@@ -42,10 +57,6 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
-
-	var stubSvc subscription.Service = subscription.NewStubService()
-	subHTTP := subscription.NewTransportHTTP(stubSvc)
-
 	r.Route("/api/v1/subscriptions", func(sr chi.Router) {
 		sr.Mount("/", subHTTP.Routes())
 	})

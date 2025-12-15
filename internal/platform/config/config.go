@@ -1,20 +1,20 @@
 package config
 
-import (
-	"os"
-)
+import "os"
 
 type Config struct {
-	AppEnv   string
-	HTTPPort string
-	LogLevel string
+	AppEnv      string
+	HTTPPort    string
+	LogLevel    string
+	DatabaseURL string
 }
 
 func Load() Config {
 	return Config{
-		AppEnv:   getenv("APP_ENV", "local"),
-		HTTPPort: getenv("HTTP_PORT", "8080"),
-		LogLevel: getenv("LOG_LEVEL", "info"),
+		AppEnv:      getenv("APP_ENV", "local"),
+		HTTPPort:    getenv("HTTP_PORT", "8080"),
+		LogLevel:    getenv("LOG_LEVEL", "info"),
+		DatabaseURL: getenv("DATABASE_URL", ""),
 	}
 }
 

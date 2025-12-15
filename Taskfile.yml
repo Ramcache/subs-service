@@ -1,0 +1,152 @@
+version: '3'
+
+dotenv: ['.env']
+
+vars:
+  BIN: bin/api
+  MAIN: ./cmd/api/main.go
+  MIGRATIONS_DIR: migrations
+  DATABASE_URL: "{{.DATABASE_URL | default .ENV.DATABASE_URL}}"
+  SWAG_DIR: docs
+
+tasks:
+
+  # === 🏁 ОСНОВНЫЕ ===
+  run:
+    desc: Запуск API локально
+    cmds:
+      - go run {{.MAIN}}
+
+  tidy:
+    desc: Синхронизация зависимостей
+    cmds:
+      # ⚙️ Удаляем docs перед tidy, чтобы избежать ошибки на CI
+      - rm -rf {{.SWAG_DIR}} || true
+      - go mod tidy
+      - go mod verify
+
+  fmt:
+    desc: Форматирование кода
+    cmds:
+      - go fmt ./...
+      - |
+        if command -v goimports > /dev/null; then
+          goimports -w .
+        else
+          echo "⚠️ goimports не установлен. Установите: go install golang.org/x/tools/cmd/goimports@latest"
+        fi
+
+  clean:
+    desc: Очистка бинарников и кэша
+    cmds:
+      - rm -rf {{.BIN}} || true
+      - go clean -testcache
+
+  # === 🧩 MIGRATIONS (goose) ===
+  migrate:up:
+    desc: Применить все миграции
+    cmds:
+      - goose -dir {{.MIGRATIONS_DIR}} postgres "{{.DATABASE_URL}}" up
+
+  migrate:down:
+    desc: Откатить последнюю миграцию
+    cmds:
+      - goose -dir {{.MIGRATIONS_DIR}} postgres "{{.DATABASE_URL}}" down
+
+  migrate:redo:
+    desc: Повторить последнюю миграцию
+    cmds:
+      - goose -dir {{.MIGRATIONS_DIR}} postgres "{{.DATABASE_URL}}" redo
+
+  migrate:status:
+    desc: Показать статус миграций
+    cmds:
+      - goose -dir {{.MIGRATIONS_DIR}} postgres "{{.DATABASE_URL}}" status
+
+  migrate:create:
+    desc: >
+      Создать новую миграцию.
+      Пример: task migrate:create name=create_users
+    cmds:
+      - goose -dir {{.MIGRATIONS_DIR}} create {{.name}} sql
+
+  # === 📘 SWAGGER ===
+  swagger:install:
+    desc: Установка swag CLI
+    cmds:
+      - go install github.com/swaggo/swag/cmd/swag@v1.16.3
+
+  swagger:gen:
+    desc: Генерация Swagger-документации
+    deps: [swagger:install]
+    cmds:
+      - swag init -g {{.MAIN}} -o {{.SWAG_DIR}}
+      - echo "✅ Swagger docs обновлены в {{.SWAG_DIR}}"
+
+  # === 🧰 GIT ===
+  git:acp:
+    desc: Добавить, закоммитить и запушить изменения
+    vars:
+      MSG: '{{.MSG | default "chore: update"}}'
+    cmds:
+      - git add .
+      - git commit -m "{{.MSG}}"
+      - git push origin HEAD
+
+  git:branch:
+    desc: Создать и перейти в новую ветку
+    cmds:
+      - git checkout -b {{.name}}
+
+  # ==== CI/CD Tasks ====
+  lint:
+    desc: Run go vet and staticcheck
+    cmds:
+      - go vet ./...
+      - |
+        if command -v staticcheck > /dev/null; then
+          staticcheck ./...
+        else
+          echo "⚠️ staticcheck not installed, skipping"
+        fi
+
+  test:
+    desc: Run all tests locally with race detector
+    cmds:
+      - CGO_ENABLED=1 go test ./... -v -race -cover
+
+  test:ci:
+    desc: Run all tests in CI (faster, no race)
+    cmds:
+      - go test ./... -v -cover
+
+  build:
+    desc: Build binary for Linux amd64 (prod)
+    cmds:
+      - GOOS=linux GOARCH=amd64 go build -o {{.BIN}} ./cmd/api
+
+  ci:
+    desc: Run full CI pipeline (lint, test:ci, swagger, build)
+    deps: [lint, test:ci, swagger:gen, build]
+
+  # === ⚙️ HELP ===
+  help:
+    desc: Показать список всех команд
+    cmds:
+      - echo "📘 Доступные команды:"
+      - task --list
+
+  monitor:up:
+    desc: Run full monitoring stack (Prometheus + Grafana + Loki + Promtail)
+    cmds:
+      - docker compose -f monitorings/docker-compose.yml up -d
+      - |
+        echo Grafana: http://localhost:3030 "(admin/admin)"
+        echo Prometheus: http://localhost:9090
+        echo Loki API: http://localhost:3100
+
+
+  monitor:down:
+    desc: Stop monitoring stack
+    cmds:
+      - docker compose -f monitorings/docker-compose.yml down

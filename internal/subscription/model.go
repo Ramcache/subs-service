@@ -11,6 +11,17 @@ type Month struct {
 	t time.Time
 }
 
+type Subscription struct {
+	ID          string
+	ServiceName string
+	Price       int64
+	UserID      string
+	StartMonth  Month
+	EndMonth    *Month
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
 func ParseMonthMMYYYY(s string) (Month, error) {
 	s = strings.TrimSpace(s)
 	parts := strings.Split(s, "-")

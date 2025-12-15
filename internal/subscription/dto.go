@@ -41,6 +41,7 @@ type TotalResponse struct {
 }
 
 type apiError struct {
-	Code    string `json:"code" example:"validation_error"`
-	Message string `json:"message" example:"service_name is required"`
+	Code      string `json:"code" example:"validation_error"`
+	Message   string `json:"message" example:"service_name is required"`
+	RequestID string `json:"request_id,omitempty" example:"c0a8012e7f9f4b2a"`
 }

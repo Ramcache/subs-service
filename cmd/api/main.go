@@ -8,15 +8,13 @@ package main
 import (
 	"context"
 	"errors"
-	httpSwagger "github.com/swaggo/http-swagger"
 	"net/http"
 	"os"
 	"os/signal"
-	"subs-service/internal/platform/db"
-	"subs-service/internal/subscription"
 	"syscall"
 	"time"
-	// + импорт сгенерённой документации:
+
+	httpSwagger "github.com/swaggo/http-swagger"
 	_ "subs-service/docs"
 
 	"github.com/go-chi/chi/v5"
@@ -26,8 +24,10 @@ import (
 
 	"subs-service/internal/httpserver"
 	"subs-service/internal/platform/config"
+	"subs-service/internal/platform/db"
 	"subs-service/internal/platform/httpmw"
 	"subs-service/internal/platform/logger"
+	"subs-service/internal/subscription"
 )
 
 func main() {
@@ -40,6 +40,13 @@ func main() {
 		panic(err)
 	}
 	defer func() { _ = log.Sync() }()
+
+	log.Info("app starting",
+		zap.String("app_env", cfg.AppEnv),
+		zap.String("log_level", cfg.LogLevel),
+		zap.String("http_port", cfg.HTTPPort),
+	)
+
 	ctx := context.Background()
 
 	pool, err := db.NewPool(ctx, db.Config{
@@ -51,21 +58,28 @@ func main() {
 	}
 	defer pool.Close()
 
+	log.Info("db connected")
+
 	repo := subscription.NewRepositoryPG(pool)
 	svc := subscription.NewService(repo)
 	subHTTP := subscription.NewTransportHTTP(svc)
 
 	r := chi.NewRouter()
+
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Recoverer)
-	r.Use(httpmw.AccessLog(log))
-	r.Use(httpmw.ContextLogger(log))
+
+	r.Use(httpmw.RequestLogger(log))
+	r.Use(httpmw.ResponseRequestID("X-Request-ID"))
+
+	r.Use(httpmw.AccessLog())
 
 	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
+
 	r.Get("/swagger/*", httpSwagger.WrapHandler)
 
 	r.Route("/api/v1/subscriptions", func(sr chi.Router) {
@@ -77,9 +91,9 @@ func main() {
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 10 * time.Second,
 		IdleTimeout:  60 * time.Second,
-	})
+	}, log)
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	runCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	go func() {
@@ -90,11 +104,15 @@ func main() {
 		}
 	}()
 
-	<-ctx.Done()
+	<-runCtx.Done()
+	log.Info("shutdown signal received")
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	_ = srv.Shutdown(shutdownCtx)
-	log.Info("http server stopped")
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		log.Error("http server shutdown failed", zap.Error(err))
+	} else {
+		log.Info("http server stopped")
+	}
 }

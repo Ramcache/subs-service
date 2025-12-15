@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+
+	plog "subs-service/internal/platform/logger"
 )
 
 type statusWriter struct {
@@ -27,7 +29,7 @@ func (w *statusWriter) Write(b []byte) (int, error) {
 	return n, err
 }
 
-func AccessLog(log *zap.Logger) func(next http.Handler) http.Handler {
+func AccessLog() func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
@@ -35,15 +37,28 @@ func AccessLog(log *zap.Logger) func(next http.Handler) http.Handler {
 			sw := &statusWriter{ResponseWriter: w}
 			next.ServeHTTP(sw, r)
 
-			log.Info("http request",
+			// если handler вообще ничего не написал
+			if sw.status == 0 {
+				sw.status = http.StatusOK
+			}
+
+			log := plog.FromContext(r.Context()).With(
 				zap.String("method", r.Method),
 				zap.String("path", r.URL.Path),
 				zap.Int("status", sw.status),
 				zap.Int("bytes", sw.bytes),
 				zap.Duration("duration", time.Since(start)),
 				zap.String("remote_addr", r.RemoteAddr),
-				zap.String("user_agent", r.UserAgent()),
 			)
+
+			switch {
+			case sw.status >= 500:
+				log.Error("http request completed")
+			case sw.status >= 400:
+				log.Warn("http request completed")
+			default:
+				log.Info("http request completed")
+			}
 		})
 	}
 }

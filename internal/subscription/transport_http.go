@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"go.uber.org/zap"
 
 	plog "subs-service/internal/platform/logger"
@@ -55,7 +56,7 @@ func (t *TransportHTTP) handleCreate(w http.ResponseWriter, r *http.Request) {
 	var req CreateRequest
 	if err := decodeJSON(r, &req); err != nil {
 		log.Warn("decode json failed", zap.Error(err))
-		writeError(w, http.StatusBadRequest, "invalid_json", err.Error())
+		writeError(w, r, http.StatusBadRequest, "invalid_json", err.Error())
 		return
 	}
 
@@ -78,13 +79,11 @@ func (t *TransportHTTP) handleCreate(w http.ResponseWriter, r *http.Request) {
 		} else {
 			log.Error("service create failed", zap.Error(err))
 		}
-		writeSvcError(w, err)
+		writeSvcError(w, r, err)
 		return
 	}
 
-	log.Info("request succeeded",
-		zap.String("subscription_id", resp.ID),
-	)
+	log.Info("request succeeded", zap.String("subscription_id", resp.ID))
 	writeJSON(w, http.StatusCreated, resp)
 }
 
@@ -111,7 +110,7 @@ func (t *TransportHTTP) handleGet(w http.ResponseWriter, r *http.Request) {
 
 	if id == "" {
 		log.Warn("validation failed", zap.String("reason", "id is required"))
-		writeError(w, http.StatusBadRequest, "validation_error", "id is required")
+		writeError(w, r, http.StatusBadRequest, "validation_error", "id is required")
 		return
 	}
 
@@ -125,7 +124,7 @@ func (t *TransportHTTP) handleGet(w http.ResponseWriter, r *http.Request) {
 		} else {
 			log.Error("service get failed", zap.Error(err))
 		}
-		writeSvcError(w, err)
+		writeSvcError(w, r, err)
 		return
 	}
 
@@ -158,19 +157,19 @@ func (t *TransportHTTP) handlePatch(w http.ResponseWriter, r *http.Request) {
 
 	if id == "" {
 		log.Warn("validation failed", zap.String("reason", "id is required"))
-		writeError(w, http.StatusBadRequest, "validation_error", "id is required")
+		writeError(w, r, http.StatusBadRequest, "validation_error", "id is required")
 		return
 	}
 
 	var req UpdateRequest
 	if err := decodeJSON(r, &req); err != nil {
 		log.Warn("decode json failed", zap.Error(err))
-		writeError(w, http.StatusBadRequest, "invalid_json", err.Error())
+		writeError(w, r, http.StatusBadRequest, "invalid_json", err.Error())
 		return
 	}
 	if err := validateUpdate(req); err != nil {
 		log.Warn("validation failed", zap.Error(err))
-		writeError(w, http.StatusBadRequest, "validation_error", err.Error())
+		writeError(w, r, http.StatusBadRequest, "validation_error", err.Error())
 		return
 	}
 
@@ -192,7 +191,7 @@ func (t *TransportHTTP) handlePatch(w http.ResponseWriter, r *http.Request) {
 		} else {
 			log.Error("service update failed", zap.Error(err))
 		}
-		writeSvcError(w, err)
+		writeSvcError(w, r, err)
 		return
 	}
 
@@ -222,7 +221,7 @@ func (t *TransportHTTP) handleDelete(w http.ResponseWriter, r *http.Request) {
 
 	if id == "" {
 		log.Warn("validation failed", zap.String("reason", "id is required"))
-		writeError(w, http.StatusBadRequest, "validation_error", "id is required")
+		writeError(w, r, http.StatusBadRequest, "validation_error", "id is required")
 		return
 	}
 
@@ -235,7 +234,7 @@ func (t *TransportHTTP) handleDelete(w http.ResponseWriter, r *http.Request) {
 		} else {
 			log.Error("service delete failed", zap.Error(err))
 		}
-		writeSvcError(w, err)
+		writeSvcError(w, r, err)
 		return
 	}
 
@@ -281,12 +280,12 @@ func (t *TransportHTTP) handleList(w http.ResponseWriter, r *http.Request) {
 
 	if limit <= 0 || limit > 200 {
 		log.Warn("validation failed", zap.String("reason", "limit out of range"))
-		writeError(w, http.StatusBadRequest, "validation_error", "limit must be between 1 and 200")
+		writeError(w, r, http.StatusBadRequest, "validation_error", "limit must be between 1 and 200")
 		return
 	}
 	if offset < 0 {
 		log.Warn("validation failed", zap.String("reason", "offset must be >= 0"))
-		writeError(w, http.StatusBadRequest, "validation_error", "offset must be >= 0")
+		writeError(w, r, http.StatusBadRequest, "validation_error", "offset must be >= 0")
 		return
 	}
 
@@ -307,7 +306,7 @@ func (t *TransportHTTP) handleList(w http.ResponseWriter, r *http.Request) {
 		} else {
 			log.Error("service list failed", zap.Error(err))
 		}
-		writeSvcError(w, err)
+		writeSvcError(w, r, err)
 		return
 	}
 
@@ -356,18 +355,18 @@ func (t *TransportHTTP) handleTotal(w http.ResponseWriter, r *http.Request) {
 
 	if from == "" || to == "" {
 		log.Warn("validation failed", zap.String("reason", "from and to are required"))
-		writeError(w, http.StatusBadRequest, "validation_error", "from and to are required (MM-YYYY)")
+		writeError(w, r, http.StatusBadRequest, "validation_error", "from and to are required (MM-YYYY)")
 		return
 	}
 
 	if _, err := ParseMonthMMYYYY(from); err != nil {
 		log.Warn("validation failed", zap.String("reason", "invalid from format"), zap.Error(err))
-		writeError(w, http.StatusBadRequest, "validation_error", "invalid from: "+err.Error())
+		writeError(w, r, http.StatusBadRequest, "validation_error", "invalid from: "+err.Error())
 		return
 	}
 	if _, err := ParseMonthMMYYYY(to); err != nil {
 		log.Warn("validation failed", zap.String("reason", "invalid to format"), zap.Error(err))
-		writeError(w, http.StatusBadRequest, "validation_error", "invalid to: "+err.Error())
+		writeError(w, r, http.StatusBadRequest, "validation_error", "invalid to: "+err.Error())
 		return
 	}
 
@@ -388,7 +387,7 @@ func (t *TransportHTTP) handleTotal(w http.ResponseWriter, r *http.Request) {
 		} else {
 			log.Error("service total failed", zap.Error(err))
 		}
-		writeSvcError(w, err)
+		writeSvcError(w, r, err)
 		return
 	}
 
@@ -426,18 +425,18 @@ func validateUpdate(req UpdateRequest) error {
 	return nil
 }
 
-func writeSvcError(w http.ResponseWriter, err error) {
+func writeSvcError(w http.ResponseWriter, r *http.Request, err error) {
 	var ve ValidationError
 
 	switch {
 	case errors.As(err, &ve):
-		writeError(w, http.StatusBadRequest, "validation_error", ve.Error())
+		writeError(w, r, http.StatusBadRequest, "validation_error", ve.Error())
 	case errors.Is(err, ErrNotFound):
-		writeError(w, http.StatusNotFound, "not_found", "resource not found")
+		writeError(w, r, http.StatusNotFound, "not_found", "resource not found")
 	case errors.Is(err, ErrInvalidInput):
-		writeError(w, http.StatusBadRequest, "validation_error", err.Error())
+		writeError(w, r, http.StatusBadRequest, "validation_error", err.Error())
 	default:
-		writeError(w, http.StatusInternalServerError, "internal_error", "internal server error")
+		writeError(w, r, http.StatusInternalServerError, "internal_error", "internal server error")
 	}
 }
 
@@ -454,8 +453,9 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
-func writeError(w http.ResponseWriter, status int, code, msg string) {
-	writeJSON(w, status, apiError{Code: code, Message: msg})
+func writeError(w http.ResponseWriter, r *http.Request, status int, code, msg string) {
+	rid := middleware.GetReqID(r.Context())
+	writeJSON(w, status, apiError{Code: code, Message: msg, RequestID: rid})
 }
 
 func parseIntDefault(s string, def int) int {

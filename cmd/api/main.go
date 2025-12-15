@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -11,27 +10,40 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/joho/godotenv"
+	"go.uber.org/zap"
 
 	"subs-service/internal/httpserver"
+	"subs-service/internal/platform/config"
+	"subs-service/internal/platform/httpmw"
+	"subs-service/internal/platform/logger"
 )
 
 func main() {
-	_ = godotenv.Load() // локально; в Docker env придёт из окружения
+	_ = godotenv.Load()
 
-	port := getenv("HTTP_PORT", "8080")
-	addr := ":" + port
+	cfg := config.Load()
+
+	log, err := logger.New(cfg.AppEnv, cfg.LogLevel)
+	if err != nil {
+		panic(err)
+	}
+	defer func() { _ = log.Sync() }()
 
 	r := chi.NewRouter()
+	r.Use(middleware.RequestID)
+	r.Use(middleware.RealIP)
+	r.Use(middleware.Recoverer)
+	r.Use(httpmw.AccessLog(log))
 
-	// базовые endpoints
 	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
 
 	srv := httpserver.New(r, httpserver.Config{
-		Addr:         addr,
+		Addr:         ":" + cfg.HTTPPort,
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 10 * time.Second,
 		IdleTimeout:  60 * time.Second,
@@ -41,9 +53,9 @@ func main() {
 	defer stop()
 
 	go func() {
-		log.Printf("http server started on %s", addr)
+		log.Info("http server started", zap.String("addr", ":"+cfg.HTTPPort))
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Printf("http server error: %v", err)
+			log.Error("http server error", zap.Error(err))
 			stop()
 		}
 	}()
@@ -54,13 +66,5 @@ func main() {
 	defer cancel()
 
 	_ = srv.Shutdown(shutdownCtx)
-	log.Printf("http server stopped")
-}
-
-func getenv(key, def string) string {
-	v := os.Getenv(key)
-	if v == "" {
-		return def
-	}
-	return v
+	log.Info("http server stopped")
 }

@@ -22,15 +22,26 @@ func (t *TransportHTTP) Routes() http.Handler {
 	r := chi.NewRouter()
 
 	r.Post("/", t.handleCreate)
+	r.Get("/", t.handleList)
+	r.Get("/total", t.handleTotal)
 	r.Get("/{id}", t.handleGet)
 	r.Patch("/{id}", t.handlePatch)
 	r.Delete("/{id}", t.handleDelete)
-	r.Get("/", t.handleList)
-	r.Get("/total", t.handleTotal)
 
 	return r
 }
 
+// handleCreate godoc
+// @Summary      Create subscription
+// @Description  Creates a new subscription record
+// @Tags         subscriptions
+// @Accept       json
+// @Produce      json
+// @Param        request body CreateRequest true "Create subscription request"
+// @Success      201 {object} SubscriptionResponse
+// @Failure      400 {object} apiError
+// @Failure      500 {object} apiError
+// @Router       /api/v1/subscriptions [post]
 func (t *TransportHTTP) handleCreate(w http.ResponseWriter, r *http.Request) {
 	var req CreateRequest
 	if err := decodeJSON(r, &req); err != nil {
@@ -47,6 +58,17 @@ func (t *TransportHTTP) handleCreate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, resp)
 }
 
+// handleGet godoc
+// @Summary      Get subscription
+// @Description  Returns subscription by id
+// @Tags         subscriptions
+// @Produce      json
+// @Param        id path string true "Subscription ID (UUID)"
+// @Success      200 {object} SubscriptionResponse
+// @Failure      400 {object} apiError
+// @Failure      404 {object} apiError
+// @Failure      500 {object} apiError
+// @Router       /api/v1/subscriptions/{id} [get]
 func (t *TransportHTTP) handleGet(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	if strings.TrimSpace(id) == "" {
@@ -62,6 +84,19 @@ func (t *TransportHTTP) handleGet(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
+// handlePatch godoc
+// @Summary      Update subscription
+// @Description  Partially updates subscription by id
+// @Tags         subscriptions
+// @Accept       json
+// @Produce      json
+// @Param        id path string true "Subscription ID (UUID)"
+// @Param        request body UpdateRequest true "Update subscription request"
+// @Success      200 {object} SubscriptionResponse
+// @Failure      400 {object} apiError
+// @Failure      404 {object} apiError
+// @Failure      500 {object} apiError
+// @Router       /api/v1/subscriptions/{id} [patch]
 func (t *TransportHTTP) handlePatch(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	if strings.TrimSpace(id) == "" {
@@ -87,6 +122,16 @@ func (t *TransportHTTP) handlePatch(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
+// handleDelete godoc
+// @Summary      Delete subscription
+// @Description  Deletes subscription by id
+// @Tags         subscriptions
+// @Param        id path string true "Subscription ID (UUID)"
+// @Success      204 "No Content"
+// @Failure      400 {object} apiError
+// @Failure      404 {object} apiError
+// @Failure      500 {object} apiError
+// @Router       /api/v1/subscriptions/{id} [delete]
 func (t *TransportHTTP) handleDelete(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	if strings.TrimSpace(id) == "" {
@@ -101,6 +146,19 @@ func (t *TransportHTTP) handleDelete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// handleList godoc
+// @Summary      List subscriptions
+// @Description  Lists subscriptions with optional filters and pagination
+// @Tags         subscriptions
+// @Produce      json
+// @Param        user_id query string false "Filter by user id (UUID)"
+// @Param        service_name query string false "Filter by service name"
+// @Param        limit query int false "Limit (1..200)" default(20)
+// @Param        offset query int false "Offset (>=0)" default(0)
+// @Success      200 {object} ListResponse
+// @Failure      400 {object} apiError
+// @Failure      500 {object} apiError
+// @Router       /api/v1/subscriptions [get]
 func (t *TransportHTTP) handleList(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 
@@ -133,6 +191,19 @@ func (t *TransportHTTP) handleList(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
+// handleTotal godoc
+// @Summary      Calculate total cost
+// @Description  Calculates total monthly cost for subscriptions within period (inclusive) with optional filters
+// @Tags         subscriptions
+// @Produce      json
+// @Param        from query string true "Start month (MM-YYYY)" example(07-2025)
+// @Param        to query string true "End month (MM-YYYY)" example(12-2025)
+// @Param        user_id query string false "Filter by user id (UUID)"
+// @Param        service_name query string false "Filter by service name"
+// @Success      200 {object} TotalResponse
+// @Failure      400 {object} apiError
+// @Failure      500 {object} apiError
+// @Router       /api/v1/subscriptions/total [get]
 func (t *TransportHTTP) handleTotal(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 
@@ -223,11 +294,6 @@ func validateUpdate(req UpdateRequest) error {
 		}
 	}
 	return nil
-}
-
-type apiError struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
 }
 
 func writeSvcError(w http.ResponseWriter, err error) {

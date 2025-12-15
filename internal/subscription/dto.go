@@ -39,3 +39,8 @@ type TotalResponse struct {
 	ServiceName *string `json:"service_name,omitempty"`
 	Total       int64   `json:"total"`
 }
+
+type apiError struct {
+	Code    string `json:"code" example:"validation_error"`
+	Message string `json:"message" example:"service_name is required"`
+}

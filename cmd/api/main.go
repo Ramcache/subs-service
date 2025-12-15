@@ -1,8 +1,14 @@
+// @title           Subscriptions API
+// @version         1.0
+// @description     REST service for aggregating user subscription data
+// @BasePath        /
+// @schemes         http
 package main
 
 import (
 	"context"
 	"errors"
+	httpSwagger "github.com/swaggo/http-swagger"
 	"net/http"
 	"os"
 	"os/signal"
@@ -10,6 +16,8 @@ import (
 	"subs-service/internal/subscription"
 	"syscall"
 	"time"
+	// + импорт сгенерённой документации:
+	_ "subs-service/docs"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -57,6 +65,8 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
+	r.Get("/swagger/*", httpSwagger.WrapHandler)
+
 	r.Route("/api/v1/subscriptions", func(sr chi.Router) {
 		sr.Mount("/", subHTTP.Routes())
 	})

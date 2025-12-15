@@ -1,0 +1,294 @@
+basePath: /
+definitions:
+  subscription.CreateRequest:
+    properties:
+      end_date:
+        type: string
+      price:
+        type: integer
+      service_name:
+        type: string
+      start_date:
+        type: string
+      user_id:
+        type: string
+    type: object
+  subscription.ListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/subscription.SubscriptionResponse'
+        type: array
+      limit:
+        type: integer
+      offset:
+        type: integer
+      total:
+        type: integer
+    type: object
+  subscription.SubscriptionResponse:
+    properties:
+      end_date:
+        type: string
+      id:
+        type: string
+      price:
+        type: integer
+      service_name:
+        type: string
+      start_date:
+        type: string
+      user_id:
+        type: string
+    type: object
+  subscription.TotalResponse:
+    properties:
+      from:
+        type: string
+      service_name:
+        type: string
+      to:
+        type: string
+      total:
+        type: integer
+      user_id:
+        type: string
+    type: object
+  subscription.UpdateRequest:
+    properties:
+      end_date:
+        type: string
+      price:
+        type: integer
+      service_name:
+        type: string
+      start_date:
+        type: string
+      user_id:
+        type: string
+    type: object
+  subscription.apiError:
+    properties:
+      code:
+        example: validation_error
+        type: string
+      message:
+        example: service_name is required
+        type: string
+    type: object
+info:
+  contact: {}
+  description: REST service for aggregating user subscription data
+  title: Subscriptions API
+  version: "1.0"
+paths:
+  /api/v1/subscriptions:
+    get:
+      description: Lists subscriptions with optional filters and pagination
+      parameters:
+      - description: Filter by user id (UUID)
+        in: query
+        name: user_id
+        type: string
+      - description: Filter by service name
+        in: query
+        name: service_name
+        type: string
+      - default: 20
+        description: Limit (1..200)
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: Offset (>=0)
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/subscription.ListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/subscription.apiError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/subscription.apiError'
+      summary: List subscriptions
+      tags:
+      - subscriptions
+    post:
+      consumes:
+      - application/json
+      description: Creates a new subscription record
+      parameters:
+      - description: Create subscription request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/subscription.CreateRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/subscription.SubscriptionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/subscription.apiError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/subscription.apiError'
+      summary: Create subscription
+      tags:
+      - subscriptions
+  /api/v1/subscriptions/{id}:
+    delete:
+      description: Deletes subscription by id
+      parameters:
+      - description: Subscription ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/subscription.apiError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/subscription.apiError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/subscription.apiError'
+      summary: Delete subscription
+      tags:
+      - subscriptions
+    get:
+      description: Returns subscription by id
+      parameters:
+      - description: Subscription ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/subscription.SubscriptionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/subscription.apiError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/subscription.apiError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/subscription.apiError'
+      summary: Get subscription
+      tags:
+      - subscriptions
+    patch:
+      consumes:
+      - application/json
+      description: Partially updates subscription by id
+      parameters:
+      - description: Subscription ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Update subscription request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/subscription.UpdateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/subscription.SubscriptionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/subscription.apiError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/subscription.apiError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/subscription.apiError'
+      summary: Update subscription
+      tags:
+      - subscriptions
+  /api/v1/subscriptions/total:
+    get:
+      description: Calculates total monthly cost for subscriptions within period (inclusive)
+        with optional filters
+      parameters:
+      - description: Start month (MM-YYYY)
+        example: 07-2025
+        in: query
+        name: from
+        required: true
+        type: string
+      - description: End month (MM-YYYY)
+        example: 12-2025
+        in: query
+        name: to
+        required: true
+        type: string
+      - description: Filter by user id (UUID)
+        in: query
+        name: user_id
+        type: string
+      - description: Filter by service name
+        in: query
+        name: service_name
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/subscription.TotalResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/subscription.apiError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/subscription.apiError'
+      summary: Calculate total cost
+      tags:
+      - subscriptions
+schemes:
+- http
+swagger: "2.0"

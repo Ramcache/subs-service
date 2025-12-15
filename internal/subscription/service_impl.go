@@ -16,10 +16,46 @@ func NewService(repo Repository) *ServiceImpl {
 	return &ServiceImpl{repo: repo}
 }
 
+type ValidationError struct {
+	Msg string
+}
+
+func (e ValidationError) Error() string { return e.Msg }
+
 func (s *ServiceImpl) Create(ctx context.Context, req CreateRequest) (SubscriptionResponse, error) {
-	sub, err := mapCreateToDomain(req)
+	if strings.TrimSpace(req.ServiceName) == "" {
+		return SubscriptionResponse{}, ValidationError{"service_name is required"}
+	}
+	if req.Price < 0 {
+		return SubscriptionResponse{}, ValidationError{"price must be >= 0"}
+	}
+	if _, err := uuid.Parse(req.UserID); err != nil {
+		return SubscriptionResponse{}, ValidationError{"invalid user_id"}
+	}
+
+	start, err := ParseMonthMMYYYY(req.StartDate)
 	if err != nil {
-		return SubscriptionResponse{}, err
+		return SubscriptionResponse{}, ValidationError{"invalid start_date"}
+	}
+
+	var end *Month
+	if req.EndDate != nil {
+		m, err := ParseMonthMMYYYY(*req.EndDate)
+		if err != nil {
+			return SubscriptionResponse{}, ValidationError{"invalid end_date"}
+		}
+		if m.Compare(start) < 0 {
+			return SubscriptionResponse{}, ValidationError{"end_date must be >= start_date"}
+		}
+		end = &m
+	}
+
+	sub := Subscription{
+		ServiceName: strings.TrimSpace(req.ServiceName),
+		Price:       req.Price,
+		UserID:      req.UserID,
+		StartMonth:  start,
+		EndMonth:    end,
 	}
 
 	created, err := s.repo.Create(ctx, sub)

@@ -38,16 +38,12 @@ func (t *TransportHTTP) handleCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := validateCreate(req); err != nil {
-		writeError(w, http.StatusBadRequest, "validation_error", err.Error())
-		return
-	}
-
 	resp, err := t.svc.Create(r.Context(), req)
 	if err != nil {
 		writeSvcError(w, err)
 		return
 	}
+
 	writeJSON(w, http.StatusCreated, resp)
 }
 
@@ -235,7 +231,11 @@ type apiError struct {
 }
 
 func writeSvcError(w http.ResponseWriter, err error) {
+	var ve ValidationError
+
 	switch {
+	case errors.As(err, &ve):
+		writeError(w, http.StatusBadRequest, "validation_error", ve.Error())
 	case errors.Is(err, ErrNotFound):
 		writeError(w, http.StatusNotFound, "not_found", "resource not found")
 	case errors.Is(err, ErrInvalidInput):

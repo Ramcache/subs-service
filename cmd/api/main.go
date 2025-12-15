@@ -47,9 +47,10 @@ func main() {
 		zap.String("http_port", cfg.HTTPPort),
 	)
 
-	ctx := context.Background()
+	dbCtx, cancelDB := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancelDB()
 
-	pool, err := db.NewPool(ctx, db.Config{
+	pool, err := db.NewPool(dbCtx, db.Config{
 		DatabaseURL: cfg.DatabaseURL,
 		MaxConns:    10,
 	})
@@ -68,10 +69,10 @@ func main() {
 
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
-	r.Use(httpmw.Recover())
+
 	r.Use(httpmw.RequestLogger(log))
 	r.Use(httpmw.ResponseRequestID("X-Request-ID"))
-
+	r.Use(httpmw.Recover())
 	r.Use(httpmw.AccessLog())
 
 	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
@@ -85,12 +86,18 @@ func main() {
 		sr.Mount("/", subHTTP.Routes())
 	})
 
-	srv := httpserver.New(r, httpserver.Config{
-		Addr:         ":" + cfg.HTTPPort,
-		ReadTimeout:  5 * time.Second,
-		WriteTimeout: 10 * time.Second,
-		IdleTimeout:  60 * time.Second,
-	}, log)
+	srv := httpserver.New(
+		r,
+		httpserver.Config{
+			Addr:              ":" + cfg.HTTPPort,
+			ReadTimeout:       5 * time.Second,
+			ReadHeaderTimeout: 5 * time.Second,
+			WriteTimeout:      10 * time.Second,
+			IdleTimeout:       60 * time.Second,
+			MaxHeaderBytes:    1 << 20, // 1MB
+		},
+		log,
+	)
 
 	runCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

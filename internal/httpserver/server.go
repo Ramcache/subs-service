@@ -15,21 +15,25 @@ type Server struct {
 }
 
 type Config struct {
-	Addr         string
-	ReadTimeout  time.Duration
-	WriteTimeout time.Duration
-	IdleTimeout  time.Duration
+	Addr              string
+	ReadTimeout       time.Duration
+	ReadHeaderTimeout time.Duration
+	WriteTimeout      time.Duration
+	IdleTimeout       time.Duration
+	MaxHeaderBytes    int
 }
 
 func New(handler http.Handler, cfg Config, log *zap.Logger) *Server {
 	return &Server{
 		log: log,
 		httpServer: &http.Server{
-			Addr:         cfg.Addr,
-			Handler:      handler,
-			ReadTimeout:  cfg.ReadTimeout,
-			WriteTimeout: cfg.WriteTimeout,
-			IdleTimeout:  cfg.IdleTimeout,
+			Addr:              cfg.Addr,
+			Handler:           handler,
+			ReadTimeout:       cfg.ReadTimeout,
+			ReadHeaderTimeout: cfg.ReadHeaderTimeout,
+			WriteTimeout:      cfg.WriteTimeout,
+			IdleTimeout:       cfg.IdleTimeout,
+			MaxHeaderBytes:    cfg.MaxHeaderBytes,
 		},
 	}
 }
@@ -55,14 +59,14 @@ func (s *Server) ListenAndServe() error {
 		return err
 	}
 
-	return err
+	s.log.Info("http server stopped accepting connections")
+	return nil
 }
 
 func (s *Server) Shutdown(ctx context.Context) error {
 	s.log.Info("http server shutdown started")
 
-	err := s.httpServer.Shutdown(ctx)
-	if err != nil {
+	if err := s.httpServer.Shutdown(ctx); err != nil {
 		s.log.Error("http server shutdown failed", zap.Error(err))
 		return err
 	}

@@ -57,7 +57,7 @@ RETURNING id, service_name, price, user_id, start_month, end_month, created_at, 
 	err := row.Scan(&s.ID, &s.ServiceName, &s.Price, &s.UserID, &start, &endT, &s.CreatedAt, &s.UpdatedAt)
 	if err != nil {
 		log.Error("db insert failed", zap.Error(err))
-		return Subscription{}, err
+		return Subscription{}, classifyPGError(err)
 	}
 
 	s.StartMonth = Month{t: start}
@@ -100,7 +100,7 @@ WHERE id = $1;
 			return Subscription{}, ErrNotFound
 		}
 		log.Error("db select failed", zap.Error(err))
-		return Subscription{}, err
+		return Subscription{}, classifyPGError(err)
 	}
 
 	s.StartMonth = Month{t: start}
@@ -159,7 +159,7 @@ RETURNING id, service_name, price, user_id, start_month, end_month, created_at, 
 			return Subscription{}, ErrNotFound
 		}
 		log.Error("db update failed", zap.Error(err))
-		return Subscription{}, err
+		return Subscription{}, classifyPGError(err)
 	}
 
 	s.StartMonth = Month{t: start}
@@ -187,7 +187,7 @@ func (r *RepositoryPG) Delete(ctx context.Context, id string) error {
 	ct, err := r.pool.Exec(ctx, q, id)
 	if err != nil {
 		log.Error("db delete failed", zap.Error(err))
-		return err
+		return classifyPGError(err)
 	}
 	if ct.RowsAffected() == 0 {
 		log.Debug("db delete no rows")
@@ -235,7 +235,7 @@ WHERE ($1::uuid IS NULL OR user_id = $1::uuid)
 	var total int64
 	if err := r.pool.QueryRow(ctx, qc, uid, sn).Scan(&total); err != nil {
 		log.Error("db count failed", zap.Error(err))
-		return nil, 0, err
+		return nil, 0, classifyPGError(err)
 	}
 	log.Debug("db count succeeded", zap.Int64("total", total))
 
@@ -243,7 +243,7 @@ WHERE ($1::uuid IS NULL OR user_id = $1::uuid)
 	rows, err := r.pool.Query(ctx, q, uid, sn, limit, offset)
 	if err != nil {
 		log.Error("db list query failed", zap.Error(err))
-		return nil, 0, err
+		return nil, 0, classifyPGError(err)
 	}
 	defer rows.Close()
 
@@ -254,7 +254,7 @@ WHERE ($1::uuid IS NULL OR user_id = $1::uuid)
 		var endT *time.Time
 		if err := rows.Scan(&s.ID, &s.ServiceName, &s.Price, &s.UserID, &start, &endT, &s.CreatedAt, &s.UpdatedAt); err != nil {
 			log.Error("db list scan failed", zap.Error(err))
-			return nil, 0, err
+			return nil, 0, classifyPGError(err)
 		}
 		s.StartMonth = Month{t: start}
 		if endT != nil {
@@ -265,7 +265,7 @@ WHERE ($1::uuid IS NULL OR user_id = $1::uuid)
 	}
 	if err := rows.Err(); err != nil {
 		log.Error("db list rows error", zap.Error(err))
-		return nil, 0, err
+		return nil, 0, classifyPGError(err)
 	}
 
 	log.Debug("db list succeeded", zap.Int("items", len(items)))
@@ -316,7 +316,7 @@ WHERE
 	var total int64
 	if err := r.pool.QueryRow(ctx, q, from.Time(), to.Time(), uid, sn).Scan(&total); err != nil {
 		log.Error("db total failed", zap.Error(err))
-		return 0, err
+		return 0, classifyPGError(err)
 	}
 
 	log.Debug("db total succeeded", zap.Int64("total", total))

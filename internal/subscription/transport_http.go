@@ -11,7 +11,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"go.uber.org/zap"
 
-	plog "subs-service/internal/platform/logger"
+	"subs-service/internal/platform/logger"
 )
 
 type TransportHTTP struct {
@@ -44,10 +44,11 @@ func (t *TransportHTTP) Routes() http.Handler {
 // @Param        request body CreateRequest true "Create subscription request"
 // @Success      201 {object} SubscriptionResponse
 // @Failure      400 {object} apiError
+// @Failure      409 {object} apiError
 // @Failure      500 {object} apiError
 // @Router       /api/v1/subscriptions [post]
 func (t *TransportHTTP) handleCreate(w http.ResponseWriter, r *http.Request) {
-	log := plog.FromContext(r.Context()).With(
+	log := logger.FromContext(r.Context()).With(
 		zap.String("op", "http.subscription.create"),
 	)
 
@@ -96,12 +97,13 @@ func (t *TransportHTTP) handleCreate(w http.ResponseWriter, r *http.Request) {
 // @Success      200 {object} SubscriptionResponse
 // @Failure      400 {object} apiError
 // @Failure      404 {object} apiError
+// @Failure      409 {object} apiError
 // @Failure      500 {object} apiError
 // @Router       /api/v1/subscriptions/{id} [get]
 func (t *TransportHTTP) handleGet(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimSpace(chi.URLParam(r, "id"))
 
-	log := plog.FromContext(r.Context()).With(
+	log := logger.FromContext(r.Context()).With(
 		zap.String("op", "http.subscription.get"),
 		zap.String("subscription_id", id),
 	)
@@ -143,12 +145,13 @@ func (t *TransportHTTP) handleGet(w http.ResponseWriter, r *http.Request) {
 // @Success      200 {object} SubscriptionResponse
 // @Failure      400 {object} apiError
 // @Failure      404 {object} apiError
+// @Failure      409 {object} apiError
 // @Failure      500 {object} apiError
 // @Router       /api/v1/subscriptions/{id} [patch]
 func (t *TransportHTTP) handlePatch(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimSpace(chi.URLParam(r, "id"))
 
-	log := plog.FromContext(r.Context()).With(
+	log := logger.FromContext(r.Context()).With(
 		zap.String("op", "http.subscription.update"),
 		zap.String("subscription_id", id),
 	)
@@ -207,12 +210,13 @@ func (t *TransportHTTP) handlePatch(w http.ResponseWriter, r *http.Request) {
 // @Success      204 "No Content"
 // @Failure      400 {object} apiError
 // @Failure      404 {object} apiError
+// @Failure      409 {object} apiError
 // @Failure      500 {object} apiError
 // @Router       /api/v1/subscriptions/{id} [delete]
 func (t *TransportHTTP) handleDelete(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimSpace(chi.URLParam(r, "id"))
 
-	log := plog.FromContext(r.Context()).With(
+	log := logger.FromContext(r.Context()).With(
 		zap.String("op", "http.subscription.delete"),
 		zap.String("subscription_id", id),
 	)
@@ -253,6 +257,7 @@ func (t *TransportHTTP) handleDelete(w http.ResponseWriter, r *http.Request) {
 // @Param        offset query int false "Offset (>=0)" default(0)
 // @Success      200 {object} ListResponse
 // @Failure      400 {object} apiError
+// @Failure      409 {object} apiError
 // @Failure      500 {object} apiError
 // @Router       /api/v1/subscriptions [get]
 func (t *TransportHTTP) handleList(w http.ResponseWriter, r *http.Request) {
@@ -264,7 +269,7 @@ func (t *TransportHTTP) handleList(w http.ResponseWriter, r *http.Request) {
 	limit := parseIntDefault(q.Get("limit"), 20)
 	offset := parseIntDefault(q.Get("offset"), 0)
 
-	log := plog.FromContext(r.Context()).With(
+	log := logger.FromContext(r.Context()).With(
 		zap.String("op", "http.subscription.list"),
 		zap.Int("limit", limit),
 		zap.Int("offset", offset),
@@ -328,6 +333,7 @@ func (t *TransportHTTP) handleList(w http.ResponseWriter, r *http.Request) {
 // @Param        service_name query string false "Filter by service name"
 // @Success      200 {object} TotalResponse
 // @Failure      400 {object} apiError
+// @Failure      409 {object} apiError
 // @Failure      500 {object} apiError
 // @Router       /api/v1/subscriptions/total [get]
 func (t *TransportHTTP) handleTotal(w http.ResponseWriter, r *http.Request) {
@@ -339,7 +345,7 @@ func (t *TransportHTTP) handleTotal(w http.ResponseWriter, r *http.Request) {
 	userID := strings.TrimSpace(q.Get("user_id"))
 	serviceName := strings.TrimSpace(q.Get("service_name"))
 
-	log := plog.FromContext(r.Context()).With(
+	log := logger.FromContext(r.Context()).With(
 		zap.String("op", "http.subscription.total"),
 		zap.String("from", from),
 		zap.String("to", to),
@@ -431,6 +437,8 @@ func writeSvcError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.As(err, &ve):
 		writeError(w, r, http.StatusBadRequest, "validation_error", ve.Error())
+	case errors.Is(err, ErrConflict):
+		writeError(w, r, http.StatusConflict, "conflict", "resource conflict")
 	case errors.Is(err, ErrNotFound):
 		writeError(w, r, http.StatusNotFound, "not_found", "resource not found")
 	case errors.Is(err, ErrInvalidInput):
@@ -471,5 +479,5 @@ func parseIntDefault(s string, def int) int {
 
 func isClientError(err error) bool {
 	var ve ValidationError
-	return errors.As(err, &ve) || errors.Is(err, ErrInvalidInput) || errors.Is(err, ErrNotFound)
+	return errors.As(err, &ve) || errors.Is(err, ErrInvalidInput) || errors.Is(err, ErrNotFound) || errors.Is(err, ErrConflict)
 }

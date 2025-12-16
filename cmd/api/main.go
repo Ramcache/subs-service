@@ -75,7 +75,7 @@ func main() {
 	r.Use(httpmw.Recover())
 	r.Use(httpmw.AccessLog())
 
-	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+	r.Get("/healths", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})

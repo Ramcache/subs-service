@@ -37,7 +37,6 @@ func AccessLog() func(next http.Handler) http.Handler {
 			sw := &statusWriter{ResponseWriter: w}
 			next.ServeHTTP(sw, r)
 
-			// если handler вообще ничего не написал
 			if sw.status == 0 {
 				sw.status = http.StatusOK
 			}
